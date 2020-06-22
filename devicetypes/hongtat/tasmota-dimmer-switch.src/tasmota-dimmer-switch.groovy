@@ -1,275 +1,165 @@
 /**
- *  Tasmota - Dimmer Switch
+ *  Tuya Open/Closed Sensor
  *
- *  Copyright 2020 AwfullySmart.com - HongTat Tan
+ *  Copyright 2014 SmartThings
  *
- *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ *  Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
+ *  in compliance with the License. You may obtain a copy of the License at:
  *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *  GNU General Public License for more details.
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *  Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
+ *  on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ *  for the specific language governing permissions and limitations under the License.
+ *
  */
+import physicalgraph.zigbee.clusters.iaszone.ZoneStatus
+import physicalgraph.zigbee.zcl.DataType
 
 metadata {
-    definition(name: "Tasmota Dimmer Switch", namespace: "hongtat", author: "HongTat Tan", ocfDeviceType: "oic.d.light") {
-        capability "Switch Level"
-        capability "Actuator"
-        capability "Health Check"
-        capability "Switch"
-        capability "Polling"
-        capability "Refresh"
-        capability "Sensor"
-        capability "Light"
-        capability "Signal Strength"
+	definition(name: "Tuya Open/Closed Sensor", namespace: "patricktd", author: "Patrick Teixeira", runLocally: true, minHubCoreVersion: '000.017.0012', executeCommandsLocally: false, genericHandler: "Zigbee", ocfDeviceType: "x.com.st.d.sensor.contact") {
+		capability "Battery"
+		capability "Configuration"
+		capability "Contact Sensor"
+		capability "Refresh"
+		capability "Health Check"
+		capability "Sensor"
 
-        attribute "lastSeen", "string"
-        attribute "version", "string"
-    }
+ 		fingerprint endpointId: "01", profileId: "0104", deviceId: "0402", inClusters: "0000,0001,0003,0500", outClusters: "0003", manufacturer: "TUYATEC-n4qd0btb", model: "RH3001"
+		fingerprint endpointId: "01", profileId: "0104", deviceId: "0402", inClusters: "0000,000A,0001,0500", outClusters: "0019", manufacturer: "TUYATEC-trhrga6p", model: "RH3001"
+	}
 
-    simulator {
-    }
+	simulator {
 
-    preferences {
-        section {
-            input(title: "Device Settings",
-                    description: "To view/update this settings, go to the Tasmota (Connect) SmartApp and select this device.",
-                    displayDuringSetup: false,
-                    type: "paragraph",
-                    element: "paragraph")
-        }
-    }
+	}
 
-    tiles(scale: 2) {
-        multiAttributeTile(name: "switch", type: "lighting", width: 6, height: 4, canChangeIcon: true) {
-            tileAttribute("device.switch", key: "PRIMARY_CONTROL") {
-                attributeState "on", label: '${name}', action: "switch.off", icon: "st.switches.switch.on", backgroundColor: "#00a0dc", nextState: "turningOff"
-                attributeState "off", label: '${name}', action: "switch.on", icon: "st.switches.switch.off", backgroundColor: "#ffffff", nextState: "turningOn"
-                attributeState "turningOn", label: '${name}', action: "switch.off", icon: "st.switches.switch.on", backgroundColor: "#00a0dc", nextState: "turningOff"
-                attributeState "turningOff", label: '${name}', action: "switch.on", icon: "st.switches.switch.off", backgroundColor: "#ffffff", nextState: "turningOn"
-            }
-            tileAttribute("device.level", key: "SLIDER_CONTROL") {
-                attributeState "level", action: "switch level.setLevel"
-            }
-        }
+	tiles(scale: 2) {
+		multiAttributeTile(name: "contact", type: "generic", width: 6, height: 4) {
+			tileAttribute("device.contact", key: "PRIMARY_CONTROL") {
+				attributeState "open", label: '${name}', icon: "st.contact.contact.open", backgroundColor: "#e86d13"
+				attributeState "closed", label: '${name}', icon: "st.contact.contact.closed", backgroundColor: "#00A0DC"
+			}
+		}
 
-        standardTile("refresh", "device.switch", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-            state "default", label: '', action: "refresh.refresh", icon: "st.secondary.refresh"
-        }
+		valueTile("battery", "device.battery", decoration: "flat", inactiveLabel: false, width: 2, height: 2) {
+			state "battery", label: '${currentValue}% battery', unit: ""
+		}
 
-        valueTile("level", "device.level", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
-            state "level", label: '${currentValue} %', unit: "%", backgroundColor: "#ffffff"
-        }
+		standardTile("refresh", "device.refresh", inactiveLabel: false, decoration: "flat", width: 2, height: 2) {
+			state "default", action: "refresh.refresh", icon: "st.secondary.refresh"
+		}
 
-        standardTile("lqi", "device.lqi", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-            state "default", label: 'LQI: ${currentValue}'
-        }
-
-        standardTile("rssi", "device.rssi", width: 2, height: 2, inactiveLabel: false, decoration: "flat") {
-            state "default", label: 'RSSI: ${currentValue}dBm'
-        }
-
-        main(["switch"])
-        details(["switch", "level", "refresh"])
-
-    }
+	}
 }
 
-def installed() {
-    sendEvent(name: "checkInterval", value: 30 * 60 + 2 * 60, displayed: false, data: [protocol: "lan", hubHardwareId: device.hub.hardwareID])
-    sendEvent(name: "switch", value: "off")
-    sendEvent(name: "level", value: 100)
-    log.debug "Installed"
-    response(refresh())
-}
-
-def uninstalled() {
-    sendEvent(name: "epEvent", value: "delete all", isStateChange: true, displayed: false, descriptionText: "Delete endpoint devices")
-}
-
-def updated() {
-    initialize()
-}
-
-def initialize() {
-    if (device.hub == null) {
-        log.error "Hub is null, must set the hub in the device settings so we can get local hub IP and port"
-        return
-    }
-
-    def syncFrequency = (parent.generalSetting("frequency") ?: 'Every 1 minute').replace('Every ', 'Every').replace(' minute', 'Minute').replace(' hour', 'Hour')
-    try {
-        "run$syncFrequency"(refresh)
-    } catch (all) { }
-
-    parent.callTasmota(this, "Status 5")
-    parent.callTasmota(this, "Backlog Rule1 ON Power#state DO WebSend ["+device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")+"] /?json={\"StatusSTS\":{\"POWER\":\"%value%\"},\"cb\":\"Status 11\"} ENDON ON Power1#state DO WebSend ["+device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")+"] /?json={\"StatusSTS\":{\"POWER1\":\"%value%\"},\"cb\":\"Status 11\"} ENDON ON Dimmer#state DO WebSend ["+device.hub.getDataValue("localIP") + ":" + device.hub.getDataValue("localSrvPortTCP")+"] /?json={\"StatusSTS\":{\"Dimmer\":\"%value%\"}} ENDON;Rule1 1")
-    refresh()
-}
+private getIAS_ZONE_TYPE_ATTRIBUTE() { 0x0001 }
+private getIAS_ZONE_TYPE_CONTACT_SWITCH_ATTRIBUTE_VALUE() { 0x0001 }
+private getBATTERY_VOLTAGE_VALUE_ATTRIBUTE() { 0x0020 }
+private getPOLL_CONTROL_CLUSTER() { 0x0020 }
+private getCHECK_IN_INTERVAL_ATTRIBUTE() { 0x0000 }
+private getFAST_POLL_TIMEOUT_ATTRIBUTE() { 0x0003 }
+private getSET_LONG_POLL_INTERVAL_CMD() { 0x02 }
+private getSET_SHORT_POLL_INTERVAL_CMD() { 0x03 }
 
 def parse(String description) {
-    def events = null
-    def message = parseLanMessage(description)
-    def json = parent.getJson(message.header)
-    if (json != null) {
-        events = parseEvents(200, json)
-    }
-    return events
-}
+	log.debug "description: $description"
 
-def calledBackHandler(physicalgraph.device.HubResponse hubResponse) {
-    def events = null
-    def status = hubResponse.status
-    def json = hubResponse.json
-    events = parseEvents(status, json)
-    return events
-}
+	Map map = zigbee.getEvent(description)
+	if (!map) {
+		if (description?.startsWith('zone status') || description?.startsWith('zone report')) {
+			map = parseIasMessage(description)
+		} else {
+			Map descMap = zigbee.parseDescriptionAsMap(description)
+            log.debug zigbee.parseDescriptionAsMap(description)
+			if (descMap?.clusterInt == zigbee.POWER_CONFIGURATION_CLUSTER && descMap.commandInt != 0x07 && descMap?.value) {
+				map = getBatteryResult(Integer.parseInt(descMap.value, 16))
+			} else if (descMap?.clusterInt == zigbee.IAS_ZONE_CLUSTER && descMap.attrInt == zigbee.ATTRIBUTE_IAS_ZONE_STATUS) {
+				def zs = new ZoneStatus(zigbee.convertToInt(descMap.value, 16))
+				map = getContactResult(zs.isAlarm1Set() ? "open" : "closed")
+			} else if (descMap?.clusterInt == zigbee.IAS_ZONE_CLUSTER && descMap.commandInt == 0x07) {
+				if (descMap.data[0] == "00") {
+					log.debug "IAS ZONE REPORTING CONFIG RESPONSE: $descMap"
+					sendEvent(name: "checkInterval", value: 60 * 12, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
+				} else {
+					log.warn "IAS ZONE REPORTING CONFIG FAILED- error code: ${descMap.data[0]}"
+				}
+			}
+		}
+	}
 
-def parseEvents(status, json) {
-    def events = []
-    if (status as Integer == 200) {
-        def channel = getDataValue("endpoints")?.toInteger()
-        def eventdateformat = parent.generalSetting("dateformat")
-        def now = new Date().format("${eventdateformat}a", location.timeZone)
-        if (channel == null) {
-            device.updateDataValue("endpoints", 1 as String)
-            channel = 1
-        }
+	log.debug "Parse returned $map"
+	def result = map ? createEvent(map) : [:]
 
-        // Power
-        if (channel != null) {
-            for (i in 0..channel) {
-                def number = (i > 0) ? i : ""
-                def power = (json?.StatusSTS?."POWER${number}" != null) ? (json?.StatusSTS?."POWER${number}") : ((json?."POWER${number}" != null) ? json?."POWER${number}" : null)
-
-                def powerStatus = null
-                if (power in ["ON", "1"]) {
-                    powerStatus = "on"
-                } else if (power in ["OFF", "0"]) {
-                    powerStatus = "off"
-                }
-                if (powerStatus != null) {
-                    if ((channel == 1) || (channel > 1 && i == 1)) {
-                        events << sendEvent(name: "switch", value: powerStatus)
-                    } else {
-                        String childDni = "${device.deviceNetworkId}-ep$i"
-                        def child = childDevices.find { it.deviceNetworkId == childDni }
-                        child?.sendEvent(name: "switch", value: powerStatus)
-                    }
-                    log.debug "Switch $number: '$powerStatus'"
-                }
-            }
-        }
-
-        // Dimmer
-        if (json?.StatusSTS?.Dimmer != null) {
-            def level = json?.StatusSTS?.Dimmer?.toInteger()
-            if (level >= 0 && level <= 100) {
-                events << sendEvent(name: "level", value: level == 99 ? 100 : level)
-            }
-            log.debug "Dimmer: '$level'"
-        }
-
-        // MAC
-        if (json?.StatusNET?.Mac != null) {
-            def dni = parent.setNetworkAddress(json.StatusNET.Mac)
-            def actualDeviceNetworkId = device.deviceNetworkId
-            if (actualDeviceNetworkId != state.dni) {
-                runIn(10, refresh)
-            }
-            log.debug "MAC: '${json.StatusNET.Mac}', DNI: '${state.dni}'"
-            if (state.dni == null || state.dni == "" || dni != state.dni) {
-                if (channel > 1 && childDevices) {
-                    childDevices.each {
-                        it.deviceNetworkId = "${dni}-ep" + parent.channelNumber(it.deviceNetworkId)
-                        log.debug "Child: " + "${dni}-ep" + parent.channelNumber(it.deviceNetworkId)
-                    }
-                }
-            }
-            state.dni = dni
-        }
-
-        // Signal Strength
-        if (json?.StatusSTS?.Wifi != null) {
-            events << sendEvent(name: "lqi", value: json?.StatusSTS?.Wifi.RSSI, displayed: false)
-            events << sendEvent(name: "rssi", value: json?.StatusSTS?.Wifi.Signal, displayed: false)
-        }
-
-        // Version
-        if (json?.StatusFWR?.Version != null) {
-            state.lastCheckedVersion = new Date().getTime()
-            events << sendEvent(name: "version", value: json.StatusFWR.Version, displayed: false)
-        }
-
-        // Call back
-        if (json?.cb != null) {
-            parent.callTasmota(this, json.cb)
-        }
-
-        // Last seen
-        events << sendEvent(name: "lastSeen", value: now, displayed: false)
-    }
-    return events
-}
-
-def on() {
-    def channel = getDataValue("endpoints")?.toInteger()
-    parent.callTasmota(this, "POWER" + ((channel == 1) ? "" : 1) + " 1")
-}
-
-def off() {
-    def channel = getDataValue("endpoints")?.toInteger()
-    parent.callTasmota(this, "POWER" + ((channel == 1) ? "" : 1) + " 0")
+	if (description?.startsWith('enroll request')) {
+		List cmds = zigbee.enrollResponse()
+		log.debug "enroll response: ${cmds}"
+		result = cmds?.collect { new physicalgraph.device.HubAction(it) }
+	}
+	return result
 }
 
 
-def setLevel(value) {
-    log.debug "setLevel >> value: $value"
-    def valueaux = value as Integer
-    def level = Math.max(Math.min(valueaux, 99), 0)
-    if (level > 0) {
-        sendEvent(name: "switch", value: "on")
-    } else {
-        sendEvent(name: "switch", value: "off")
-    }
-    parent.callTasmota(this, "DIMMER " + level)
+private Map parseIasMessage(String description) {
+	ZoneStatus zs = zigbee.parseZoneStatus(description)
+	return zs.isAlarm1Set() ? getContactResult('open') : getContactResult('closed')
 }
 
-def setLevel(value, duration) {
-    log.debug "setLevel >> value: $value, duration: $duration"
-    def valueaux = value as Integer
-    def level = Math.max(Math.min(valueaux, 99), 0)
-    parent.callTasmota(this, "DIMMER " + level)
+private Map getBatteryResult(rawValue) {
+	log.debug 'Battery'
+	def linkText = getLinkText(device)
+
+	def result = [:]
+
+	def volts = rawValue / 10
+	if (!(rawValue == 0 || rawValue == 255)) {
+		def minVolts = 2.1
+		def maxVolts = 3.0
+		def pct = (volts - minVolts) / (maxVolts - minVolts)
+		def roundedPct = Math.round(pct * 100)
+		if (roundedPct <= 0)
+			roundedPct = 1
+		result.value = Math.min(100, roundedPct)
+		result.descriptionText = "${linkText} battery was ${result.value}%"
+		result.name = 'battery'
+	}
+
+	return result
 }
 
-def poll() {
-    refresh()
+private Map getContactResult(value) {
+	log.debug 'Contact Status'
+	def linkText = getLinkText(device)
+	def descriptionText = "${linkText} was ${value == 'open' ? 'opened' : 'closed'}"
+	return [
+		name           : 'contact',
+		value          : value,
+		descriptionText: descriptionText
+	]
 }
 
+/**
+ * PING is used by Device-Watch in attempt to reach the Device
+ * */
 def ping() {
-    refresh()
+	zigbee.readAttribute(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS)
 }
 
-def refresh(dni=null) {
-    def lastRefreshed = state.lastRefreshed
-    if (lastRefreshed && (now() - lastRefreshed < 5000)) return
-    state.lastRefreshed = now()
+def refresh() {
+	log.debug "Refreshing Battery"
+	def refreshCmds = zigbee.readAttribute(zigbee.POWER_CONFIGURATION_CLUSTER, BATTERY_VOLTAGE_VALUE_ATTRIBUTE) + zigbee.readAttribute(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS) + zigbee.enrollResponse()
 
-    // Check version every 30m
-    def lastCheckedVersion = state.lastCheckedVersion
-    if (!lastCheckedVersion || (lastCheckedVersion && (now() - lastCheckedVersion > (30 * 60 * 1000)))) {
-        parent.callTasmota(this, "Status 2")
-    }
+	return refreshCmds
+}
 
-    def actualDeviceNetworkId = device.deviceNetworkId
-    if (state.dni == null || state.dni == "" || actualDeviceNetworkId != state.dni) {
-        parent.callTasmota(this, "Status 5")
-    }
-    parent.callTasmota(this, "Status 11")
+def configure() {
+	// Device-Watch allows 2 check-in misses from device + ping (plus 1 min lag time)
+	// enrolls with default periodic reporting until newer 5 min interval is confirmed
+	sendEvent(name: "checkInterval", value: 2 * 60 * 60 + 1 * 60, displayed: false, data: [protocol: "zigbee", hubHardwareId: device.hub.hardwareID, offlinePingable: "1"])
+
+	log.debug "Configuring Reporting, IAS CIE, and Bindings."
+	def cmds = refresh() +
+		zigbee.configureReporting(zigbee.IAS_ZONE_CLUSTER, zigbee.ATTRIBUTE_IAS_ZONE_STATUS, DataType.BITMAP16, 30, 60 * 5, null) +
+		zigbee.batteryConfig() +
+		zigbee.enrollResponse()
+	return cmds
 }
